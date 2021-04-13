@@ -1,0 +1,10 @@
+# editor
+.idea
+.vscode
+
+# modules
+node_modules
+
+# test
+*.nogit.*
+*.nogit/
