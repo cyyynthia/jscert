@@ -25,9 +25,31 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// Modules to manipulate bits
-export * from './asn.js'
-export * from './pem.js'
+import { decodePem, encodePem } from './pem.js'
 
-// Modules to manipulate actual objects
-export { default as CertificateSigningRequest } from './csr.js'
+const LABEL = 'CERTIFICATE REQUEST'
+
+export default class CertificateSigningRequest {
+  toAsn (): Buffer {
+    return Buffer.alloc(0) // todo
+  }
+
+  toPem (): string {
+    return encodePem(this.toAsn(), LABEL)
+  }
+
+  // @ts-expect-error
+  static fromAsn (asn: Buffer): CertificateSigningRequest {
+    // todo: validation (untrusted data memes)
+    return new CertificateSigningRequest() // todo
+  }
+
+  static fromPem (pem: string): CertificateSigningRequest {
+    const { label, asn } = decodePem(pem)
+    if (label !== LABEL) {
+      throw new Error(`not a valid csr: invalid label: expected ${LABEL}, got ${label}`)
+    }
+
+    return CertificateSigningRequest.fromAsn(asn)
+  }
+}

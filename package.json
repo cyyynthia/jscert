@@ -1,7 +1,7 @@
 {
   "name": "@cyyynthia/jscert",
   "version": "0.1.0",
-  "description": "A fast, lightweight & dependency-free nodejs library to read, write and manipulate X.509 certificates",
+  "description": "A fast, lightweight & dependency-free NodeJS library to read, write and manipulate X.509 certificates",
   "type": "module",
   "main": "index.js",
   "repository": "https://github.com/cyyynthia/jscert",

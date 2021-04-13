@@ -25,18 +25,18 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-export type AsnBooleanNode = { type: 'boolean', value: boolean }
-export type AsnIntegerNode = { type: 'integer', value: number }
-export type AsnBitStringNode = { type: 'bit_string', value: Buffer }
-export type AsnOctetStringNode = { type: 'octet_string', value: Buffer }
-export type AsnNullNode = { type: 'null', value: null }
-export type AsnObjectIdNode = { type: 'oid', value: string }
-export type AsnUtf8StringNode = { type: 'utf8_string', value: string }
-export type AsnPrintableStringNode = { type: 'printable_string', value: string }
-export type AsnIa5StringNode = { type: 'ia5_string', value: string }
-export type AsnSequenceNode = { type: 'sequence', value: AsnNode[] }
-export type AsnSetNode = { type: 'set', value: AsnNode[] }
-export type AsnCustomNode = { type: 'custom', tag: number, value: Buffer }
+export type AsnBooleanNode = { type: 'boolean', value: boolean, length: number }
+export type AsnIntegerNode = { type: 'integer', value: number, length: number }
+export type AsnBitStringNode = { type: 'bit_string', value: Buffer, length: number }
+export type AsnOctetStringNode = { type: 'octet_string', value: Buffer, length: number }
+export type AsnNullNode = { type: 'null', value: null, length: number }
+export type AsnObjectIdNode = { type: 'oid', value: string, length: number }
+export type AsnUtf8StringNode = { type: 'utf8_string', value: string, length: number }
+export type AsnPrintableStringNode = { type: 'printable_string', value: string, length: number }
+export type AsnIa5StringNode = { type: 'ia5_string', value: string, length: number }
+export type AsnSequenceNode = { type: 'sequence', value: AsnNode[], length: number }
+export type AsnSetNode = { type: 'set', value: AsnNode[], length: number }
+export type AsnCustomNode = { type: 'custom', tag: number, value: Buffer, length: number }
 export type AsnNode =
   | AsnBooleanNode
   | AsnIntegerNode
@@ -227,9 +227,9 @@ function decodeSequence (buf: Buffer): AsnNode[] {
         throw new Error(`invalid ASN.1: unknown type 0x${type.toString(16)}`)
       }
 
-      res.push({ type: defs[type].id, value: defs[type].decode(chunk) })
+      res.push({ type: defs[type].id, value: defs[type].decode(chunk), length: len })
     } else {
-      res.push({ type: 'custom', tag: type, value: chunk })
+      res.push({ type: 'custom', tag: type, value: chunk, length: len })
     }
   }
 
@@ -250,15 +250,15 @@ function encodeSequence (seq: AsnNode[]): Buffer {
   )
 }
 
-export function decodeAsn (buffer: Buffer): AsnNode[] {
+export function decodeAsn (buffer: Buffer): AsnSequenceNode {
   if (buffer[0] !== 0x30) {
     throw new TypeError('malformed ASN.1: does not start with a sequence')
   }
 
-  return (decodeSequence(buffer)[0] as AsnSequenceNode).value
+  return { type: 'sequence', value: decodeSequence(buffer), length: buffer.length }
 }
 
-export function encodeAsn (asn: AsnNode[]): Buffer {
-  const buf = encodeSequence(asn)
+export function encodeAsn (asn: AsnSequenceNode): Buffer {
+  const buf = encodeSequence(asn.value)
   return Buffer.concat([ Buffer.from([ defs.ids.sequence ]), encodeLength(buf.length), buf ])
 }

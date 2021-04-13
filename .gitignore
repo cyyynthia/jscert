@@ -4,6 +4,7 @@
 
 # modules
 node_modules
+dist
 
 # test
 *.nogit.*
