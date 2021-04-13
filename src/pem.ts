@@ -25,6 +25,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+// todo: harden the parsing part! needs fuzzing and proper handling of untrusted data
+
 const PEM_SPLIT_REG = /.{1,64}/g
 
 export type PemEntry = { label: string, asn: Buffer }

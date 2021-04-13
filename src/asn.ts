@@ -25,6 +25,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+// todo: harden the parsing part! needs fuzzing and proper handling of untrusted data
+
 export type AsnBooleanNode = { type: 'boolean', value: boolean, length: number }
 export type AsnIntegerNode = { type: 'integer', value: number, length: number }
 export type AsnBitStringNode = { type: 'bit_string', value: Buffer, length: number }
@@ -34,6 +36,8 @@ export type AsnObjectIdNode = { type: 'oid', value: string, length: number }
 export type AsnUtf8StringNode = { type: 'utf8_string', value: string, length: number }
 export type AsnPrintableStringNode = { type: 'printable_string', value: string, length: number }
 export type AsnIa5StringNode = { type: 'ia5_string', value: string, length: number }
+export type AsnUtcTimeNode = { type: 'utc_time', value: Date, length: number }
+export type AsnGeneralizedTimeNode = { type: 'generalized_time', value: Date, length: number }
 export type AsnSequenceNode = { type: 'sequence', value: AsnNode[], length: number }
 export type AsnSetNode = { type: 'set', value: AsnNode[], length: number }
 export type AsnCustomNode = { type: 'custom', tag: number, value: Buffer, length: number }
@@ -47,6 +51,8 @@ export type AsnNode =
   | AsnUtf8StringNode
   | AsnPrintableStringNode
   | AsnIa5StringNode
+  | AsnUtcTimeNode
+  | AsnGeneralizedTimeNode
   | AsnSequenceNode
   | AsnSetNode
   | AsnCustomNode
@@ -60,6 +66,9 @@ type Definitions = {
   }
 }
 
+const DATE_UTC_RE = /^(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:(\d{2}))?(Z|(?:([+-])(\d{2})(\d{2})))?$/
+const DATE_GENERIC_RE = /^(\d{4})(\d{2})(\d{2})(\d{2})(?:(\d{2})(?:(\d{2})(?:\.(\d{1,3}))?)?)?(Z|(?:([+-])(\d{2})(\d{2})))?$/
+
 const defs: Definitions = {
   ids: {
     boolean: 0x01,
@@ -71,6 +80,8 @@ const defs: Definitions = {
     utf8_string: 0x0c,
     printable_string: 0x13,
     ia5_string: 0x16,
+    utc_time: 0x17,
+    generalized_time: 0x18,
     sequence: 0x30,
     set: 0x31
   },
@@ -119,6 +130,16 @@ const defs: Definitions = {
     id: 'ia5_string',
     decode: (buf: Buffer): string => buf.toString(),
     encode: (str: string): Buffer => Buffer.from(str)
+  },
+  [0x17]: {
+    id: 'utc_time',
+    decode: (buf: Buffer): Date => decodeDate(buf, true),
+    encode: (date: Date): Buffer => encodeDate(date, true)
+  },
+  [0x18]: {
+    id: 'generalized_time',
+    decode: (buf: Buffer): Date => decodeDate(buf, false),
+    encode: (date: Date): Buffer => encodeDate(date, false)
   },
   [0x30]: {
     id: 'sequence',
@@ -213,6 +234,80 @@ function encodeObjectId (oid: string): Buffer {
   return Buffer.from(res)
 }
 
+function decodeDate (buf: Buffer, utc: boolean): Date {
+  const encoded = buf.toString()
+  let year, month, day, hour, minute, second, milli
+  if (utc) {
+    const parsed = encoded.match(DATE_UTC_RE)
+    if (!parsed) throw new Error('invalid asn.1: invalid utc date')
+
+    year = Number(parsed[1])
+    year += year > 50 ? 1900 : 2000 // https://tools.ietf.org/html/rfc5280#section-4.1.2.5.1
+    month = Number(parsed[2])
+    day = Number(parsed[3])
+    hour = Number(parsed[4])
+    minute = Number(parsed[5])
+    second = parsed[6] ? Number(parsed[6]) : 0
+    milli = 0
+    if (parsed[7] !== 'Z') {
+      if (parsed[8] === '+') {
+        hour += Number(parsed[9])
+        minute += Number(parsed[10])
+      } else {
+        hour -= Number(parsed[9])
+        minute -= Number(parsed[10])
+      }
+    }
+  } else {
+    const parsed = encoded.match(DATE_GENERIC_RE)
+    if (!parsed) throw new Error('invalid asn.1: invalid generic date')
+    year = Number(parsed[1])
+    month = Number(parsed[2])
+    day = Number(parsed[3])
+    hour = Number(parsed[4])
+    minute = parsed[5] ? Number(parsed[5]) : 0
+    second = parsed[6] ? Number(parsed[6]) : 0
+    milli = parsed[7] ? Number(`0.${parsed[7]}`) * 1000 : 0
+
+    if (!parsed[8]) {
+      minute += new Date().getTimezoneOffset()
+    } else if (parsed[8] !== 'Z') {
+      if (parsed[9] === '+') {
+        hour += Number(parsed[10])
+        minute += Number(parsed[11])
+      } else {
+        hour -= Number(parsed[10])
+        minute -= Number(parsed[11])
+      }
+    }
+  }
+
+  const date = new Date(0)
+  date.setUTCFullYear(year)
+  date.setUTCMonth(month - 1)
+  date.setUTCDate(day)
+  date.setUTCHours(hour)
+  date.setUTCMinutes(minute)
+  date.setUTCSeconds(second)
+  date.setUTCMilliseconds(milli)
+  return date
+}
+
+function encodeDate (date: Date, utc: boolean): Buffer {
+  const ms = date.getUTCMilliseconds()
+  const parts = [
+    utc ? date.getUTCFullYear() % 100 : date.getUTCFullYear(),
+    date.getUTCMonth() + 1,
+    date.getUTCDate(),
+    date.getUTCHours(),
+    date.getUTCMinutes(),
+    date.getUTCSeconds(),
+    utc || !ms ? void 0 : (ms / 1000).toFixed(3)
+  ]
+
+  return Buffer.from(parts.filter(Boolean).map((n) => n!.toString().padStart(2, '0')).join('') + 'Z')
+}
+
 function decodeSequence (buf: Buffer): AsnNode[] {
   const res: AsnNode[] = []
   let cursor = 0
@@ -224,7 +319,7 @@ function decodeSequence (buf: Buffer): AsnNode[] {
 
     if ((type >> 6) === 0) {
       if (!(type in defs)) {
-        throw new Error(`invalid ASN.1: unknown type 0x${type.toString(16)}`)
+        throw new Error(`invalid asn.1: unknown type 0x${type.toString(16)}`)
       }
 
       res.push({ type: defs[type].id, value: defs[type].decode(chunk), length: len })
@@ -252,7 +347,7 @@ function encodeSequence (seq: AsnNode[]): Buffer {
 
 export function decodeAsn (buffer: Buffer): AsnSequenceNode {
   if (buffer[0] !== 0x30) {
-    throw new TypeError('malformed ASN.1: does not start with a sequence')
+    throw new TypeError('malformed asn.1: does not start with a sequence')
   }
 
   return { type: 'sequence', value: decodeSequence(buffer), length: buffer.length }

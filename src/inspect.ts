@@ -78,7 +78,7 @@ export function inspectAsn (asn: Buffer | AsnSequenceNode) {
   }
 
   if (asn.type !== 'sequence') {
-    throw new TypeError(`invalid asn node: expected a sequence, got ${asn.type}`)
+    throw new TypeError(`invalid asn.1 node: expected a sequence, got ${asn.type}`)
   }
 
   const [ string ] = stringifyAsnSequence(asn)

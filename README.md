@@ -4,9 +4,17 @@
 
 A fast, lightweight & dependency-free NodeJS library to read, write and manipulate X.509 certificates.
 
+**WARNING**: For the time being, you shouldn't pass untrusted data to the lib or unexpected things might happen to your
+cat. While the lib should be working for *valid* data, it lacks on proper hardening of the parsing bits and proper
+data validation/error handling, so maliciously crafted bits of data may cause some damage.
+
+I plan to, in the future, try this lib against a fuzzer and make sure it's as safe as I can get it to be.
+
 ## Install
 Soon:tm:
 <!--
+The library is alpha-quality, potentially broken and doesn't do a lot of things yet.
+
 **Note**: This library uses ES Modules.
 ```
 pnpm i @cyyynthia/jscert
