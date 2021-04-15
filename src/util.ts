@@ -25,37 +25,21 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-import type { AsnStringNode } from './asn.js'
+import type { AsnNode, AsnSequenceNode } from './asn.js'
 
-type ObjectIdMap = {
-  ids: {
-    distinguishedName: Record<string, { oid: string, type: AsnStringNode['type'] }>
+export function typedAsnGetOrThrow<T extends AsnNode['type']> (sequence: AsnSequenceNode, item: number, type: T): AsnNode & { type: T } {
+  if (sequence.type !== 'sequence') {
+    throw new TypeError(`type mismatch: expected source to be a sequence, got ${sequence.type}`)
   }
-  distinguishedName: Record<ObjectIdMap['ids']['distinguishedName'][string]['oid'], { name: keyof ObjectIdMap['ids']['distinguishedName'], type: AsnStringNode['type'] }>
-}
 
-const objectIds: ObjectIdMap = {
-  ids: {
-    distinguishedName: {
-      commonName: { oid: '2.5.4.3', type: 'utf8_string' },
-      country: { oid: '2.5.4.6', type: 'printable_string' },
-      locality: { oid: '2.5.4.7', type: 'utf8_string' },
-      state: { oid: '2.5.4.8', type: 'utf8_string' },
-      organization: { oid: '2.5.4.10', type: 'utf8_string' },
-      organizationalUnit: { oid: '2.5.4.11', type: 'utf8_string' },
-      emailAddress: { oid: '1.2.840.113549.1.9.1', type: 'ia5_string' },
-    }
-  },
-
-  distinguishedName: {
-    '2.5.4.3': { name: 'commonName', type: 'utf8_string' },
-    '2.5.4.6': { name: 'country', type: 'printable_string' },
-    '2.5.4.7': { name: 'locality', type: 'utf8_string' },
-    '2.5.4.8': { name: 'state', type: 'utf8_string' },
-    '2.5.4.10': { name: 'organization', type: 'utf8_string' },
-    '2.5.4.11': { name: 'organizationalUnit', type: 'utf8_string' },
-    '1.2.840.113549.1.9.1': { name: 'emailAddress', type: 'ia5_string' },
+  const node = sequence.value[item]
+  if (!node) {
+    throw new Error('sequence item out of range')
   }
-}
 
-export default objectIds
+  if (node.type !== type) {
+    throw new TypeError(`type mismatch: expected ${type} got ${node.type}`)
+  }
+
+  return node as AsnNode & { type: Extract<T, 'string'> }
+}

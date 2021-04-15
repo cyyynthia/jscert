@@ -363,20 +363,3 @@ export function encodeAsn (asn: AsnSequenceNode): Buffer {
   const buf = encodeSequence(asn.value)
   return Buffer.concat([ Buffer.from([ defs.ids.sequence ]), encodeLength(buf.length), buf ])
 }
-
-export function typedGetOrThrow<T extends AsnNode['type']> (sequence: AsnSequenceNode, item: number, type: T): AsnNode & { type: T } {
-  if (sequence.type !== 'sequence') {
-    throw new TypeError(`type mismatch: expected source to be a sequence, got ${sequence.type}`)
-  }
-
-  const node = sequence.value[item]
-  if (!node) {
-    throw new Error('sequence item out of range')
-  }
-
-  if (node.type !== type) {
-    throw new TypeError(`type mismatch: expected ${type} got ${node.type}`)
-  }
-
-  return node as AsnNode & { type: Extract<T, 'string'> }
-}

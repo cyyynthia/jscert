@@ -27,11 +27,13 @@
 
 import type { KeyObject } from 'crypto'
 import type { AsnSequenceNode, AsnSetNode } from './asn.js'
-import type { SupportedSignatureAlgorithm } from './oid.js'
+import type { DigestAlgorithm } from './sign.js'
 
-import { createPublicKey, sign, verify } from 'crypto'
+import { createPublicKey } from 'crypto'
+import { typedAsnGetOrThrow } from './util.js'
 import { decodePem, encodePem } from './pem.js'
-import { decodeAsn, encodeAsn, typedGetOrThrow } from './asn.js'
+import { decodeAsn, encodeAsn } from './asn.js'
+import { sign, verify } from './sign.js'
 import objectIds from './oid.js'
 
 type x509DN = {
@@ -44,28 +46,36 @@ type x509DN = {
   emailAddress?: string
 }
 
-type Algorithm = {
-  signature: SupportedSignatureAlgorithm
+type CsrOptions = {
+  digest?: DigestAlgorithm
 }
 
 const LABEL = 'CERTIFICATE REQUEST'
 
 export default class CertificateSigningRequest {
   distinguishedName: x509DN
-  algorithm: Algorithm
+  options: CsrOptions
   key: KeyObject
   #encoded?: Buffer
 
-  constructor (distinguishedName: x509DN, key: KeyObject, algorithm: Algorithm) {
+  constructor (distinguishedName: x509DN, key: KeyObject, options: CsrOptions = {}) {
+    if (key.asymmetricKeyType !== 'rsa' && key.asymmetricKeyType !== 'ec') {
+      throw new Error('cannot create csr: invalid key type. only rsa and ec are supported')
+    }
+
     this.distinguishedName = distinguishedName
-    this.algorithm = algorithm
+    this.options = options
     this.key = key
   }
 
   toAsn (): Buffer {
     if (this.#encoded) {
-      // This is defined when the CSR has been decoded using fromAsn (or fromPem), which yields a readonly csr
+      // This is defined when the CSR has been decoded using fromAsn (or fromPem). no need to re-encode things
       return this.#encoded
+    }
+
+    if (this.key.type !== 'private') {
+      throw new Error('cannot encode csr: provided key is not the private key')
     }
 
     const subject: AsnSetNode[] = []
@@ -100,19 +110,7 @@ export default class CertificateSigningRequest {
       type: 'sequence',
       value: [
         certInfo,
-        {
-          type: 'sequence',
-          value: [
-            { type: 'oid', value: objectIds.ids.signatureAlgorithm[this.algorithm.signature], length: 0 },
-            { type: 'null', value: null, length: 0 }
-          ],
-          length: 0
-        },
-        {
-          type: 'bit_string',
-          value: Buffer.concat([ Buffer.from([ 0x00 ]), sign(this.algorithm.signature, encodeAsn(certInfo), this.key) ]),
-          length: 0
-        },
+        ...sign(certInfo, this.key, this.options.digest ?? 'sha256')
       ],
       length: 0
     })
@@ -130,23 +128,16 @@ export default class CertificateSigningRequest {
     }
 
     // -- Read certificate information
-    const certInfo = typedGetOrThrow(decoded, 0, 'sequence')
-    const certInfoVersion = typedGetOrThrow(certInfo, 0, 'integer')
-    const certInfoSubject = typedGetOrThrow(certInfo, 1, 'sequence')
-    const certInfoKey = typedGetOrThrow(certInfo, 2, 'sequence')
+    const certInfo = typedAsnGetOrThrow(decoded, 0, 'sequence')
+    const certInfoVersion = typedAsnGetOrThrow(certInfo, 0, 'integer')
+    const certInfoSubject = typedAsnGetOrThrow(certInfo, 1, 'sequence')
+    const certInfoKey = typedAsnGetOrThrow(certInfo, 2, 'sequence')
 
     // -- Read public key information
     const key = createPublicKey({ key: encodeAsn(certInfoKey), format: 'der', type: 'spki' })
 
-    // -- Read key information
-    const signatureAlgOid = typedGetOrThrow(typedGetOrThrow(decoded, 1, 'sequence'), 0, 'oid').value
-    if (!(signatureAlgOid in objectIds.signatureAlgorithm)) {
-      throw new Error(`unsupported signature algorithm (oid ${signatureAlgOid})`)
-    }
-
-    const signatureAlg = objectIds.signatureAlgorithm[signatureAlgOid]
-    const signature = typedGetOrThrow(decoded, 2, 'bit_string').value.slice(1)
-    if (!verify(signatureAlg, encodeAsn(certInfo), key, signature)) {
+    // -- Verify signature
+    if (!verify(certInfo, key, typedAsnGetOrThrow(decoded, 1, 'sequence'), typedAsnGetOrThrow(decoded, 2, 'bit_string'))) {
       throw new Error('invalid csr: cannot verify signature')
     }
 
@@ -158,14 +149,14 @@ export default class CertificateSigningRequest {
       const seq = entry.value
       if (seq.type !== 'sequence') throw new TypeError(`type mismatch: expected sequence got ${seq.type}`)
 
-      const oid = typedGetOrThrow(seq, 0, 'oid').value
+      const oid = typedAsnGetOrThrow(seq, 0, 'oid').value
       if (oid in objectIds.distinguishedName) { // todo: throw un unrecognized values? or ignore is fine?
         const type = objectIds.distinguishedName[oid]
-        dn[type.name as keyof x509DN] = typedGetOrThrow(seq, 1, type.type).value
+        dn[type.name as keyof x509DN] = typedAsnGetOrThrow(seq, 1, type.type).value
       }
     }
 
-    const csr = new CertificateSigningRequest(dn, key, { signature: signatureAlg })
+    const csr = new CertificateSigningRequest(dn, key)
     csr.#encoded = asn
     return csr
   }

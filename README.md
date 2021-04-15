@@ -27,16 +27,53 @@ npm i @cyyynthia/jscert
 ## Usage
 full usage soon:tm:
 
+### Create a Certificate Signing Request
+```ts
+import { writeFileSync } from 'fs'
+import { generateKeyPairSync } from 'crypto'
+import { CertificateSigningRequest, encodePem } from '@cyyynthia/jscert'
+
+// The public key can be ignored here since the CSR expects a private key to sign the data,
+// and the public key bit will be derived from it.
+const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
+const dn = {
+  country: 'FR',
+  state: 'Occitanie',
+  locality: 'Toulouse',
+  organization: 'Borkenware',
+  organizationalUnit: 'DSI',
+  commonName: '*.borkenware.localhost',
+  emailAddress: 'cyyynthia@borkenware.com'
+}
+
+const csr = new CertificateSigningRequest(dn, privateKey)
+
+// Write the key & the csr
+writeFileSync('./private-key.pem', encodePem(privateKey.export({ format: 'der', type: 'pkcs1' }), 'RSA PRIVATE KEY'))
+writeFileSync('./certificate-signing-request.pem', csr.toPem())
+```
+
+### Read a Certificate Signing Request
+```ts
+import { readFileSync } from 'fs'
+import { CertificateSigningRequest } from '@cyyynthia/jscert'
+
+const pem = readFileSync('./certificate-signing-request.pem', 'utf8')
+const csr = CertificateSigningRequest.fromPem(pem)
+
+console.log(csr)
+```
+
 ### Decode/encode PEM
 ```ts
 // note: for now the implementation can only read a string with a **single** PEM entity in it.
 import { readFileSync } from 'fs'
-import { decodePem, encodePem } from '@cyyynthia/jscert'
+import { decodePem, encodeAsn, encodePem } from '@cyyynthia/jscert'
 
 const pem = readFileSync('./certificate-signing-request.pem', 'utf8')
 console.log(decodePem(pem)) // ~> { label: 'CERTIFICATE REQUEST', asn: <Buffer ...> }
 
-const asn = ...
+const asn = encodeAsn(...)
 console.log(encodePem(asn, 'CERTIFICATE REQUEST')) // ~> -----BEGIN CERTIFICATE REQUEST----- ...
 ```
 
