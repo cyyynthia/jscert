@@ -364,9 +364,7 @@ export function encodeAsn (asn: AsnSequenceNode): Buffer {
   return Buffer.concat([ Buffer.from([ defs.ids.sequence ]), encodeLength(buf.length), buf ])
 }
 
-export function typedGetOrThrow<T extends AsnNode['type']> (sequence: AsnSequenceNode, item: number, type: T): AsnNode & { type: T }
-export function typedGetOrThrow<T extends 'string'> (sequence: AsnSequenceNode, item: number, type: T): AsnStringNode
-export function typedGetOrThrow<T extends AsnNode['type'] | 'string'> (sequence: AsnSequenceNode, item: number, type: T): AsnNode & { type: Extract<T, 'string'> } {
+export function typedGetOrThrow<T extends AsnNode['type']> (sequence: AsnSequenceNode, item: number, type: T): AsnNode & { type: T } {
   if (sequence.type !== 'sequence') {
     throw new TypeError(`type mismatch: expected source to be a sequence, got ${sequence.type}`)
   }
@@ -376,11 +374,7 @@ export function typedGetOrThrow<T extends AsnNode['type'] | 'string'> (sequence:
     throw new Error('sequence item out of range')
   }
 
-  if (type === 'string') {
-    if (![ 'utf8_string', 'printable_string', 'ia5_string' ].includes(node.type)) {
-      throw new TypeError(`type mismatch: expected a string got ${node.type}`)
-    }
-  } else if (node.type !== type) {
+  if (node.type !== type) {
     throw new TypeError(`type mismatch: expected ${type} got ${node.type}`)
   }
 

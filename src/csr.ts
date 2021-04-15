@@ -25,11 +25,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-import type { RsaPublicKey, RsaPrivateKey } from 'crypto'
-import { verify, createPublicKey, constants as CryptoConstants } from 'crypto'
+import type { KeyObject } from 'crypto'
+import { verify, createPublicKey } from 'crypto'
 import { decodePem, encodePem } from './pem.js'
 import { decodeAsn, encodeAsn, typedGetOrThrow } from './asn.js'
-import { distinguishedName } from './oid.js'
+import objectIds from './oid.js'
 
 type x509DN = {
   country?: string
@@ -45,22 +45,21 @@ const LABEL = 'CERTIFICATE REQUEST'
 
 export default class CertificateSigningRequest {
   distinguishedName: x509DN
-  publicKey: RsaPublicKey
 
-  // There will always be either one of those set. When there's no pk, the object is readonly.
-  privateKey: RsaPrivateKey | null
+  // There will always be the private key OR the signature set. If signature is set, CSR is readonly.
+  // todo: allow supplying a private key to unlock read
+  publicKey: KeyObject
+  privateKey: KeyObject | null
   #signature?: Buffer
 
-  constructor (distinguishedName: x509DN, publicKey: RsaPublicKey, privateKey: RsaPrivateKey)
-  constructor (distinguishedName: x509DN, publicKey: RsaPublicKey, signature: Buffer)
-  constructor (distinguishedName: x509DN, publicKey: RsaPublicKey, keyData: RsaPrivateKey | Buffer) {
+  constructor (distinguishedName: x509DN, key: KeyObject, signature?: Buffer) {
     this.distinguishedName = distinguishedName
-    this.publicKey = publicKey
-    if (keyData instanceof Buffer) {
-      this.#signature = keyData
+    this.publicKey = key
+    if (signature) {
       this.privateKey = null
+      this.#signature = signature
     } else {
-      this.privateKey = keyData
+      this.privateKey = key
     }
   }
 
@@ -91,41 +90,31 @@ export default class CertificateSigningRequest {
     // -- Read public key information
     //const keyAlg = typedGetOrThrow(typedGetOrThrow(certInfoKey, 0, 'sequence'), 0, 'oid').value
     const keyBits = typedGetOrThrow(certInfoKey, 1, 'bit_string').value.slice(1) // todo: remove slice (bit string memes)
-    const key: RsaPublicKey = {
-      key: createPublicKey({ key: keyBits, format: 'der', type: 'pkcs1' }), // todo: do something with the alg
-      padding: CryptoConstants.RSA_PKCS1_PADDING
-    }
+    const key = createPublicKey({ key: keyBits, format: 'der', type: 'pkcs1' }) // todo: do something with the alg
 
     // -- Read key information
     //const signatureAlg = typedGetOrThrow(typedGetOrThrow(decoded, 1, 'sequence'), 0, 'oid').value
     const signature = typedGetOrThrow(decoded, 2, 'bit_string').value.slice(1) // todo: remove slice (bit string memes)
 
     // todo: use algorthm specified in signatureAlg
-    if (!verify('rsa-sha256', encodeAsn(certInfo), key.key, signature)) {
+    if (!verify('sha256WithRSAEncryption', encodeAsn(certInfo), key, signature)) {
       throw new Error('invalid csr: cannot verify signature')
     }
 
     // -- Decode certificate information
     if (certInfoVersion.value !== 0) throw new Error(`invalid csr: expected version to be 0, got ${certInfoVersion.value}`)
-    const subjectEntries: Array<[ string, string ]> = []
+    const dn: x509DN = {}
     for (const entry of certInfoSubject.value) {
       if (entry.type !== 'set') throw new TypeError(`type mismatch: expected set got ${entry.type}`)
-
       const seq = entry.value
       if (seq.type !== 'sequence') throw new TypeError(`type mismatch: expected sequence got ${seq.type}`)
-      subjectEntries.push([ typedGetOrThrow(seq, 0, 'oid').value, typedGetOrThrow(seq, 1, 'string').value ])
-    }
 
-    // todo: support all the OIDs?
-    const subject = Object.fromEntries(subjectEntries)
-    const dn: x509DN = {}
-    if (distinguishedName.country in subject) dn.country = subject[distinguishedName.country]
-    if (distinguishedName.state in subject) dn.state = subject[distinguishedName.state]
-    if (distinguishedName.locality in subject) dn.locality = subject[distinguishedName.locality]
-    if (distinguishedName.organization in subject) dn.organization = subject[distinguishedName.organization]
-    if (distinguishedName.organizationalUnit in subject) dn.organizationalUnit = subject[distinguishedName.organizationalUnit]
-    if (distinguishedName.commonName in subject) dn.commonName = subject[distinguishedName.commonName]
-    if (distinguishedName.emailAddress in subject) dn.emailAddress = subject[distinguishedName.emailAddress]
+      const oid = typedGetOrThrow(seq, 0, 'oid').value
+      if (oid in objectIds.distinguishedName) {
+        const type = objectIds.distinguishedName[oid]
+        dn[type.name as keyof x509DN] = typedGetOrThrow(seq, 1, type.type).value
+      }
+    }
 
     return new CertificateSigningRequest(dn, key, signature)
   }

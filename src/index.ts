@@ -28,6 +28,7 @@
 // Modules to manipulate bits
 export * from './asn.js'
 export * from './pem.js'
+export * from './inspect.js'
 
 // Modules to manipulate actual objects
 export { default as CertificateSigningRequest } from './csr.js'
