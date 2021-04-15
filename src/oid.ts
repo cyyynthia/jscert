@@ -56,11 +56,11 @@ export type SupportedSignatureAlgorithm =
 
 type ObjectIdMap = {
   ids: {
-    distinguishedName: Record<string, string>
+    distinguishedName: Record<string, { oid: string, type: AsnStringNode['type'] }>
     publicKeyAlgorithm: Record<SupportedPublicKeyAlgorithm, string>
     signatureAlgorithm: Record<SupportedSignatureAlgorithm, string>
   }
-  distinguishedName: Record<ObjectIdMap['ids']['distinguishedName'][string], { name: keyof ObjectIdMap['ids']['distinguishedName'], type: AsnStringNode['type'] }>,
+  distinguishedName: Record<ObjectIdMap['ids']['distinguishedName'][string]['oid'], { name: keyof ObjectIdMap['ids']['distinguishedName'], type: AsnStringNode['type'] }>,
   publicKeyAlgorithm: Record<ObjectIdMap['ids']['publicKeyAlgorithm'][SupportedPublicKeyAlgorithm], SupportedPublicKeyAlgorithm>
   signatureAlgorithm: Record<ObjectIdMap['ids']['signatureAlgorithm'][SupportedSignatureAlgorithm], SupportedSignatureAlgorithm>
 }
@@ -68,13 +68,13 @@ type ObjectIdMap = {
 const objectIds: ObjectIdMap = {
   ids: {
     distinguishedName: {
-      commonName: '2.5.4.3',
-      country: '2.5.4.6',
-      locality: '2.5.4.7',
-      state: '2.5.4.8',
-      organization: '2.5.4.10',
-      organizationalUnit: '2.5.4.11',
-      emailAddress: '1.2.840.113549.1.9.1',
+      commonName: { oid: '2.5.4.3', type: 'utf8_string' },
+      country: { oid: '2.5.4.6', type: 'printable_string' },
+      locality: { oid: '2.5.4.7', type: 'utf8_string' },
+      state: { oid: '2.5.4.8', type: 'utf8_string' },
+      organization: { oid: '2.5.4.10', type: 'utf8_string' },
+      organizationalUnit: { oid: '2.5.4.11', type: 'utf8_string' },
+      emailAddress: { oid: '1.2.840.113549.1.9.1', type: 'ia5_string' },
     },
     publicKeyAlgorithm: {
       rsa: '1.2.840.113549.1.1.1',

@@ -26,9 +26,10 @@
  */
 
 import type { KeyObject } from 'crypto'
+import type { AsnSequenceNode, AsnSetNode } from './asn.js'
 import type { SupportedPublicKeyAlgorithm, SupportedSignatureAlgorithm } from './oid.js'
 
-import { verify, createPublicKey } from 'crypto'
+import { createPublicKey, sign, verify } from 'crypto'
 import { decodePem, encodePem } from './pem.js'
 import { decodeAsn, encodeAsn, typedGetOrThrow } from './asn.js'
 import objectIds from './oid.js'
@@ -53,30 +54,85 @@ const LABEL = 'CERTIFICATE REQUEST'
 export default class CertificateSigningRequest {
   distinguishedName: x509DN
   algorithm: Algorithm
+  key: KeyObject
+  #encoded?: Buffer
 
-  // There will always be the private key OR the signature set. If signature is set, CSR is readonly.
-  // todo: allow supplying a private key to unlock read
-  publicKey: KeyObject
-  privateKey: KeyObject | null
-  #signature?: Buffer
-
-  constructor (distinguishedName: x509DN, key: KeyObject, algorithm: Algorithm, signature?: Buffer) {
+  constructor (distinguishedName: x509DN, key: KeyObject, algorithm: Algorithm) {
     this.distinguishedName = distinguishedName
     this.algorithm = algorithm
-    this.publicKey = key
-    if (signature) {
-      this.privateKey = null
-      this.#signature = signature
-    } else {
-      this.privateKey = key
-    }
+    this.key = key
   }
 
   toAsn (): Buffer {
-    if (!this.#signature) {
-      console.log(this.privateKey!)
+    if (this.#encoded) {
+      // This is defined when the CSR has been decoded using fromAsn (or fromPem), which yields a readonly csr
+      return this.#encoded
     }
-    return Buffer.alloc(0) // todo
+
+    const pk = createPublicKey(this.key).export({ format: 'der', type: 'pkcs1' })
+
+    const subject: AsnSetNode[] = []
+    for (const dnProp in this.distinguishedName) {
+      if (dnProp in this.distinguishedName) {
+        subject.push({
+          type: 'set',
+          value: {
+            type: 'sequence',
+            value: [
+              { type: 'oid', value: objectIds.ids.distinguishedName[dnProp].oid, length: 0 },
+              { type: objectIds.ids.distinguishedName[dnProp].type, value: this.distinguishedName[dnProp as keyof x509DN] as string, length: 0 },
+            ],
+            length: 0
+          },
+          length: 0
+        })
+      }
+    }
+
+    const certInfo: AsnSequenceNode = {
+      type: 'sequence',
+      value: [
+        { type: 'integer', value: 0, length: 0 },
+        { type: 'sequence', value: subject, length: 0 },
+        {
+          type: 'sequence',
+          value: [
+            {
+              type: 'sequence',
+              value: [
+                { type: 'oid', value: objectIds.ids.publicKeyAlgorithm[this.algorithm.key], length: 0 },
+                { type: 'null', value: null, length: 0 }
+              ],
+              length: 0
+            },
+            { type: 'bit_string', value: Buffer.concat([ Buffer.from([ 0x00 ]), pk ]), length: 0 },
+          ],
+          length: 0
+        }
+      ],
+      length: 0
+    }
+
+    return encodeAsn({
+      type: 'sequence',
+      value: [
+        certInfo,
+        {
+          type: 'sequence',
+          value: [
+            { type: 'oid', value: objectIds.ids.signatureAlgorithm[this.algorithm.signature], length: 0 },
+            { type: 'null', value: null, length: 0 }
+          ],
+          length: 0
+        },
+        {
+          type: 'bit_string',
+          value: Buffer.concat([ Buffer.from([ 0x00 ]), sign(this.algorithm.signature, encodeAsn(certInfo), this.key) ]),
+          length: 0
+        },
+      ],
+      length: 0
+    })
   }
 
   toPem (): string {
@@ -127,13 +183,15 @@ export default class CertificateSigningRequest {
       if (seq.type !== 'sequence') throw new TypeError(`type mismatch: expected sequence got ${seq.type}`)
 
       const oid = typedGetOrThrow(seq, 0, 'oid').value
-      if (oid in objectIds.distinguishedName) {
+      if (oid in objectIds.distinguishedName) { // todo: throw un unrecognized values? or ignore is fine?
         const type = objectIds.distinguishedName[oid]
         dn[type.name as keyof x509DN] = typedGetOrThrow(seq, 1, type.type).value
       }
     }
 
-    return new CertificateSigningRequest(dn, key, { key: keyAlg, signature: signatureAlg }, signature)
+    const csr = new CertificateSigningRequest(dn, key, { key: keyAlg, signature: signatureAlg })
+    csr.#encoded = asn
+    return csr
   }
 
   static fromPem (pem: string): CertificateSigningRequest {
