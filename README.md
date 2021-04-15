@@ -8,7 +8,8 @@ A fast, lightweight & dependency-free NodeJS library to read, write and manipula
 cat. While the lib should be working for *valid* data, it lacks on proper hardening of the parsing bits and proper
 data validation/error handling, so maliciously crafted bits of data may cause some damage.
 
-I plan to, in the future, try this lib against a fuzzer and make sure it's as safe as I can get it to be.
+I may, in the future, try this lib against a fuzzer and make sure it's as safe as I can get it to be. For now, only
+use the lib with data you trust!!
 
 ## Install
 Soon:tm:

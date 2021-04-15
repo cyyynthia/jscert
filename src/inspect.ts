@@ -33,7 +33,8 @@ import { decodeAsn } from './asn.js'
 function stringifyAsnSequence (asn: AsnSequenceNode | AsnSetNode, depth = 0, cursor = 0): [ string, number ] {
   const res: string[] = []
 
-  for (const node of asn.value) {
+  const value = Array.isArray(asn.value) ? asn.value : [ asn.value ]
+  for (const node of value) {
     const headerLength = 1 + (node.length < 128 ? 1 : node.length < 256 ? 2 : 1 + Math.ceil(Math.log2(node.length) / 8))
     const dataKind = ([ 'sequence', 'set' ].includes(node.type)) ? 'cons:' : 'prim:'
     const dataType = ' '.repeat(depth) + node.type.toUpperCase().padEnd(18, ' ')

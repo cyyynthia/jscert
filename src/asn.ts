@@ -26,6 +26,7 @@
  */
 
 // todo: harden the parsing part! needs fuzzing and proper handling of untrusted data
+// todo: allow decoding streams?
 
 export type AsnBooleanNode = { type: 'boolean', value: boolean, length: number }
 export type AsnIntegerNode = { type: 'integer', value: number, length: number }
@@ -39,7 +40,7 @@ export type AsnIa5StringNode = { type: 'ia5_string', value: string, length: numb
 export type AsnUtcTimeNode = { type: 'utc_time', value: Date, length: number }
 export type AsnGeneralizedTimeNode = { type: 'generalized_time', value: Date, length: number }
 export type AsnSequenceNode = { type: 'sequence', value: AsnNode[], length: number }
-export type AsnSetNode = { type: 'set', value: AsnNode[], length: number }
+export type AsnSetNode = { type: 'set', value: AsnNode, length: number }
 export type AsnCustomNode = { type: 'custom', tag: number, value: Buffer, length: number }
 export type AsnNode =
   | AsnBooleanNode
@@ -56,6 +57,11 @@ export type AsnNode =
   | AsnSequenceNode
   | AsnSetNode
   | AsnCustomNode
+
+export type AsnStringNode =
+  | AsnUtf8StringNode
+  | AsnPrintableStringNode
+  | AsnIa5StringNode
 
 type Definitions = {
   ids: Record<Exclude<AsnNode['type'], 'custom'>, number>
@@ -148,8 +154,8 @@ const defs: Definitions = {
   },
   [0x31]: {
     id: 'set',
-    decode: (buf: Buffer): AsnNode[] => decodeSequence(buf),
-    encode: (set: AsnNode[]): Buffer => encodeSequence(set)
+    decode: (buf: Buffer): AsnNode => decodeSequence(buf)[0],
+    encode: (set: AsnNode): Buffer => encodeSequence([ set ])
   }
 }
 
@@ -225,9 +231,9 @@ function encodeObjectId (oid: string): Buffer {
   for (let part of parts) {
     const buf = []
     while (part !== 0) {
-      const bit = part ^ 128
-      part = part >> 8
-      buf.unshift(buf.length ? (bit | 128) : bit)
+      const bit = (part & 0xff) | 0x80
+      buf.unshift(!buf.length ? bit ^ 0x80 : bit)
+      part = part >> 7
     }
     res.push(...buf)
   }
@@ -356,4 +362,27 @@ export function decodeAsn (buffer: Buffer): AsnSequenceNode {
 export function encodeAsn (asn: AsnSequenceNode): Buffer {
   const buf = encodeSequence(asn.value)
   return Buffer.concat([ Buffer.from([ defs.ids.sequence ]), encodeLength(buf.length), buf ])
+}
+
+export function typedGetOrThrow<T extends AsnNode['type']> (sequence: AsnSequenceNode, item: number, type: T): AsnNode & { type: T }
+export function typedGetOrThrow<T extends 'string'> (sequence: AsnSequenceNode, item: number, type: T): AsnStringNode
+export function typedGetOrThrow<T extends AsnNode['type'] | 'string'> (sequence: AsnSequenceNode, item: number, type: T): AsnNode & { type: Extract<T, 'string'> } {
+  if (sequence.type !== 'sequence') {
+    throw new TypeError(`type mismatch: expected source to be a sequence, got ${sequence.type}`)
+  }
+
+  const node = sequence.value[item]
+  if (!node) {
+    throw new Error('sequence item out of range')
+  }
+
+  if (type === 'string') {
+    if (![ 'utf8_string', 'printable_string', 'ia5_string' ].includes(node.type)) {
+      throw new TypeError(`type mismatch: expected a string got ${node.type}`)
+    }
+  } else if (node.type !== type) {
+    throw new TypeError(`type mismatch: expected ${type} got ${node.type}`)
+  }
+
+  return node as AsnNode & { type: Extract<T, 'string'> }
 }

@@ -25,41 +25,25 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// todo: harden the parsing part! needs fuzzing and proper handling of untrusted data
-// todo: allow decoding streams?
-
-const PEM_SPLIT_REG = /.{1,64}/g
-
-export type PemEntry = { label: string, asn: Buffer }
-
-export function decodePem (pem: string): PemEntry { // todo: pem files can contain multiple things in it
-  const data = pem.trim().split('\n')
-  const header = data.shift()
-  const footer = data.pop()
-  if (!header || !footer || !data.length) {
-    throw new Error('invalid pem: not enough data')
-  }
-
-  if (!header.startsWith('-----BEGIN ') || !header.endsWith('-----')) {
-    throw new Error('invalid pem: invalid header')
-  }
-
-  if (!footer.startsWith('-----END ') || !footer.endsWith('-----')) {
-    throw new Error('invalid pem: invalid footer')
-  }
-
-  const label = header.slice(11, header.length - 5)
-  if (label !== footer.slice(9, footer.length - 5)) {
-    throw new Error('invalid pem: mismatched header/footer labels')
-  }
-
-  return {
-    label: label,
-    asn: Buffer.from(data.join(''), 'base64')
-  }
+function setupReverseLookup (obj: Record<PropertyKey, any>) {
+  const reverse = Object.fromEntries(Object.entries(obj).map(([ k, v ]) => [ v, k ]))
+  Object.assign(obj, reverse)
 }
 
-export function encodePem (asn: Buffer, label: string): string {
-  const data = asn.toString('base64').match(PEM_SPLIT_REG)!.join('\n')
-  return `-----BEGIN ${label}-----\n${data}\n-----END ${label}-----`
+export const distinguishedName = {
+  commonName: '2.5.4.3',
+  country: '2.5.4.6',
+  locality: '2.5.4.7',
+  state: '2.5.4.8',
+  organization: '2.5.4.10',
+  organizationalUnit: '2.5.4.11',
+  emailAddress: '1.2.840.113549.1.9.1'
 }
+
+export const algorithms = { // todo: add more
+  rsaEncryption: '1.2.840.113549.1.1.1',
+  sha256WithRsaEncryption: '1.2.840.113549.1.1.11'
+}
+
+setupReverseLookup(distinguishedName)
+setupReverseLookup(algorithms)
