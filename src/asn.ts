@@ -103,12 +103,12 @@ const defs: Definitions = {
     encode: (int: number): Buffer => encodeInteger(int)
   },
   [0x03]: {
-    id: 'bit_string', // todo - https://docs.microsoft.com/en-us/windows/win32/seccertenroll/about-bit-string
+    id: 'bit_string',
     decode: (buf: Buffer): Buffer => buf,
     encode: (bit: Buffer): Buffer => bit
   },
   [0x04]: {
-    id: 'octet_string', // todo - https://docs.microsoft.com/en-us/windows/win32/seccertenroll/about-octet-string
+    id: 'octet_string',
     decode: (buf: Buffer): Buffer => buf,
     encode: (bit: Buffer): Buffer => bit
   },

@@ -26,6 +26,8 @@
  */
 
 import type { KeyObject } from 'crypto'
+import type { SupportedPublicKeyAlgorithm, SupportedSignatureAlgorithm } from './oid.js'
+
 import { verify, createPublicKey } from 'crypto'
 import { decodePem, encodePem } from './pem.js'
 import { decodeAsn, encodeAsn, typedGetOrThrow } from './asn.js'
@@ -41,10 +43,16 @@ type x509DN = {
   emailAddress?: string
 }
 
+type Algorithm = {
+  key: SupportedPublicKeyAlgorithm
+  signature: SupportedSignatureAlgorithm
+}
+
 const LABEL = 'CERTIFICATE REQUEST'
 
 export default class CertificateSigningRequest {
   distinguishedName: x509DN
+  algorithm: Algorithm
 
   // There will always be the private key OR the signature set. If signature is set, CSR is readonly.
   // todo: allow supplying a private key to unlock read
@@ -52,8 +60,9 @@ export default class CertificateSigningRequest {
   privateKey: KeyObject | null
   #signature?: Buffer
 
-  constructor (distinguishedName: x509DN, key: KeyObject, signature?: Buffer) {
+  constructor (distinguishedName: x509DN, key: KeyObject, algorithm: Algorithm, signature?: Buffer) {
     this.distinguishedName = distinguishedName
+    this.algorithm = algorithm
     this.publicKey = key
     if (signature) {
       this.privateKey = null
@@ -88,16 +97,24 @@ export default class CertificateSigningRequest {
     const certInfoKey = typedGetOrThrow(certInfo, 2, 'sequence')
 
     // -- Read public key information
-    //const keyAlg = typedGetOrThrow(typedGetOrThrow(certInfoKey, 0, 'sequence'), 0, 'oid').value
-    const keyBits = typedGetOrThrow(certInfoKey, 1, 'bit_string').value.slice(1) // todo: remove slice (bit string memes)
-    const key = createPublicKey({ key: keyBits, format: 'der', type: 'pkcs1' }) // todo: do something with the alg
+    const keyAlgOid = typedGetOrThrow(typedGetOrThrow(certInfoKey, 0, 'sequence'), 0, 'oid').value
+    if (!(keyAlgOid in objectIds.publicKeyAlgorithm)) {
+      throw new Error(`unsupported public key algorithm (oid ${keyAlgOid})`)
+    }
+
+    const keyAlg = objectIds.publicKeyAlgorithm[keyAlgOid]
+    const keyBits = typedGetOrThrow(certInfoKey, 1, 'bit_string').value.slice(1)
+    const key = createPublicKey({ key: keyBits, format: 'der', type: 'pkcs1' })
 
     // -- Read key information
-    //const signatureAlg = typedGetOrThrow(typedGetOrThrow(decoded, 1, 'sequence'), 0, 'oid').value
-    const signature = typedGetOrThrow(decoded, 2, 'bit_string').value.slice(1) // todo: remove slice (bit string memes)
+    const signatureAlgOid = typedGetOrThrow(typedGetOrThrow(decoded, 1, 'sequence'), 0, 'oid').value
+    if (!(signatureAlgOid in objectIds.signatureAlgorithm)) {
+      throw new Error(`unsupported signature algorithm (oid ${signatureAlgOid})`)
+    }
 
-    // todo: use algorthm specified in signatureAlg
-    if (!verify('sha256WithRSAEncryption', encodeAsn(certInfo), key, signature)) {
+    const signatureAlg = objectIds.signatureAlgorithm[signatureAlgOid]
+    const signature = typedGetOrThrow(decoded, 2, 'bit_string').value.slice(1)
+    if (!verify(signatureAlg, encodeAsn(certInfo), key, signature)) {
       throw new Error('invalid csr: cannot verify signature')
     }
 
@@ -116,7 +133,7 @@ export default class CertificateSigningRequest {
       }
     }
 
-    return new CertificateSigningRequest(dn, key, signature)
+    return new CertificateSigningRequest(dn, key, { key: keyAlg, signature: signatureAlg }, signature)
   }
 
   static fromPem (pem: string): CertificateSigningRequest {
