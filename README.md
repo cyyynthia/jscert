@@ -25,8 +25,6 @@ npm i @cyyynthia/jscert
 -->
 
 ## Usage
-full usage soon:tm:
-
 ### Create a Certificate Signing Request
 ```ts
 import { writeFileSync } from 'fs'
@@ -50,7 +48,7 @@ const csr = new CertificateSigningRequest(dn, privateKey)
 
 // Write the key & the csr
 writeFileSync('./private-key.pem', encodePem(privateKey.export({ format: 'der', type: 'pkcs1' }), 'RSA PRIVATE KEY'))
-writeFileSync('./certificate-signing-request.pem', csr.toPem())
+writeFileSync('./certificate-signing-request.pem', csr.toPem()) // .toAsn() is also available
 ```
 
 ### Read a Certificate Signing Request
@@ -59,9 +57,79 @@ import { readFileSync } from 'fs'
 import { CertificateSigningRequest } from '@cyyynthia/jscert'
 
 const pem = readFileSync('./certificate-signing-request.pem', 'utf8')
-const csr = CertificateSigningRequest.fromPem(pem)
+const csr = CertificateSigningRequest.fromPem(pem) // .fromAsn(asnBuffer) is also available
 
 console.log(csr)
+```
+
+### Turn a CSR into a self-signed Certificate
+```ts
+import { readFileSync } from 'fs'
+import { CertificateSigningRequest } from '@cyyynthia/jscert'
+
+const csr = new CertificateSigningRequest(...)
+// If the CSR wasn't created with new CertificateSigningRequest,
+// the operation will fail as the private key would be unknown.
+// You can pass the private key as a parameter in this case.
+// The key you pass must match the public key!!
+const cert = csr.selfSign() // or csr.selfSign(privateKey)
+
+console.log(cert.toPem()) // .toAsn() is also available
+```
+
+### Turn a CSR into a signed Certificate
+```ts
+import { readFileSync } from 'fs'
+import { CertificateSigningRequest, Certificate } from '@cyyynthia/jscert'
+
+const issuerCert = Certificate.fromPem(...)
+const issuerPrivateKey = ... // PrivateKeyObject
+
+const pem = readFileSync('./certificate-signing-request.pem', 'utf8')
+const csr = CertificateSigningRequest.fromPem(pem)
+const cert = csr.sign(issuerCert, issuerPrivateKey) // The certificate and the private key must match!!
+
+console.log(cert.toPem()) // .toAsn() is also available
+```
+
+### Turn a CSR into a signed Certificate
+```ts
+import { readFileSync } from 'fs'
+import { CertificateSigningRequest, Certificate } from '@cyyynthia/jscert'
+
+const issuerCert = Certificate.fromPem(...)
+const issuerPrivateKey = ... // PrivateKeyObject
+
+const pem = readFileSync('./certificate-signing-request.pem', 'utf8')
+const csr = CertificateSigningRequest.fromPem(pem)
+const cert = csr.sign(issuerCert, issuerPrivateKey) // The certificate and the private key must match!!
+console.log(cert)
+```
+
+### Read a certificate
+```ts
+import { readFileSync } from 'fs'
+import { Certificate } from '@cyyynthia/jscert'
+
+const pem = readFileSync('./certificate.pem', 'utf8')
+const cert = Certificate.fromPem(pem)  // .fromAsn(asnBuffer) is also available
+console.log(cert)
+```
+
+### Verify the authenticity of a certificate
+**Note**: the lib will only check validity period and if the signatures match. The lib will NOT check if the
+certificate you pass is trusted, and the lib will always yield `true` if the certificate is self-signed (as long
+as we are withing its validity period). **You are responsible for ensuring self-signed certificates are in any form
+of trust chain**.
+
+You can check if a certificate is self-signed by checking if the `selfSigned` property is true.
+```ts
+import { readFileSync } from 'fs'
+import { Certificate } from '@cyyynthia/jscert'
+
+const rootCert = Certificate.fromPem(readFileSync('./root-cert.pem', 'utf8'))
+const cert = Certificate.fromPem(readFileSync('./certificate.pem', 'utf8'))
+console.log(cert.verify(rootCert))
 ```
 
 ### Decode/encode PEM

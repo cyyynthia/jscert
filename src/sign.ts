@@ -96,10 +96,17 @@ export function sign (data: AsnSequenceNode, key: KeyObject, digest: DigestAlgor
 }
 
 export function verify (data: AsnSequenceNode, key: KeyObject, algorithm: AsnSequenceNode, signature: AsnBitStringNode): boolean {
-  const sigAlgOid = typedAsnGetOrThrow(algorithm, 0, 'oid').value
-  if (!(sigAlgOid in digestByObjectId)) {
-    throw new Error(`cannot verify signature: unknown algorithm ${sigAlgOid}`)
+  return verifyRaw(encodeAsn(data), key, typedAsnGetOrThrow(algorithm, 0, 'oid').value, signature.value.slice(1))
+}
+
+export function verifyRaw (data: Buffer, key: KeyObject, algorithm: string, signature: Buffer): boolean {
+  if (!(algorithm in digestByObjectId)) {
+    throw new Error(`cannot verify signature: unknown algorithm ${algorithm}`)
   }
 
-  return cryptoVerify(digestByObjectId[sigAlgOid], encodeAsn(data), key, signature.value.slice(1))
+  try {
+    return cryptoVerify(digestByObjectId[algorithm], data, key, signature)
+  } catch {
+    return false
+  }
 }

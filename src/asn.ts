@@ -29,7 +29,7 @@
 // todo: allow decoding streams?
 
 export type AsnBooleanNode = { type: 'boolean', value: boolean, length: number }
-export type AsnIntegerNode = { type: 'integer', value: number, length: number }
+export type AsnIntegerNode = { type: 'integer', value: bigint, length: number }
 export type AsnBitStringNode = { type: 'bit_string', value: Buffer, length: number }
 export type AsnOctetStringNode = { type: 'octet_string', value: Buffer, length: number }
 export type AsnNullNode = { type: 'null', value: null, length: number }
@@ -99,8 +99,8 @@ const defs: Definitions = {
   },
   [0x02]: {
     id: 'integer',
-    decode: (buf: Buffer): number => decodeInteger(buf),
-    encode: (int: number): Buffer => encodeInteger(int)
+    decode: (buf: Buffer): bigint => decodeInteger(buf),
+    encode: (int: bigint): Buffer => encodeInteger(int)
   },
   [0x03]: {
     id: 'bit_string',
@@ -183,23 +183,22 @@ function encodeLength (length: number): Buffer {
   return Buffer.from(res)
 }
 
-function decodeInteger (buf: Buffer): number {
-  let mult = 1
-  if (buf[0] & 128) {
-    buf[0] = buf[0] ^ 128
-    mult = -1
-  }
-
-  return buf.reduce((a, b) => (a << 8) + b, 0) * mult
+function decodeInteger (buf: Buffer): bigint {
+  if (buf[0] & 128) buf[0] = buf[0] ^ 128
+  const res = buf.reduce((a, b) => (BigInt(a) << 8n) + BigInt(b), 0n)
+  return (buf[0] & 128) ? -res : res
 }
 
-function encodeInteger (integer: number): Buffer {
-  const negative = integer < 0
-  integer = Math.abs(integer)
+function encodeInteger (integer: bigint): Buffer {
+  const negative = integer < 0n
+  if (negative) {
+    integer = (~integer) + 1n
+  }
+
   const res: number[] = []
-  while (integer !== 0) {
-    const byte = integer ^ (res.length ? 256 : 128)
-    integer = integer >> 8
+  while (integer !== 0n) {
+    const byte = Number(integer & 255n)
+    integer = integer >> 8n
     res.unshift(byte)
   }
   if (!res.length) res.push(0)
@@ -214,7 +213,7 @@ function decodeObjectId (buf: Buffer): string {
     if (byte & 128) {
       acc = (acc << 7) + ((byte << 1) ^ 256)
     } else if (acc) {
-      res += `.${(acc << 6) + ((byte | 128) ^ 128)}`
+      res += `.${(acc << 6) + (byte & 127)}`
       acc = 0
     } else {
       res += `.${byte}`

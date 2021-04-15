@@ -26,7 +26,7 @@
  */
 
 import type { KeyObject } from 'crypto'
-import type { AsnSequenceNode, AsnSetNode } from './asn.js'
+import type { AsnSequenceNode } from './asn.js'
 import type { DigestAlgorithm } from './sign.js'
 
 import { createPublicKey } from 'crypto'
@@ -34,17 +34,7 @@ import { typedAsnGetOrThrow } from './util.js'
 import { decodePem, encodePem } from './pem.js'
 import { decodeAsn, encodeAsn } from './asn.js'
 import { sign, verify } from './sign.js'
-import objectIds from './oid.js'
-
-type x509DN = {
-  country?: string
-  state?: string
-  locality?: string
-  organization?: string
-  organizationalUnit?: string
-  commonName?: string
-  emailAddress?: string
-}
+import { DistinguishedName, parseDistinguishedName, serializeDistinguishedName } from './x509.js'
 
 type CsrOptions = {
   digest?: DigestAlgorithm
@@ -53,12 +43,12 @@ type CsrOptions = {
 const LABEL = 'CERTIFICATE REQUEST'
 
 export default class CertificateSigningRequest {
-  distinguishedName: x509DN
+  distinguishedName: DistinguishedName
   options: CsrOptions
   key: KeyObject
   #encoded?: Buffer
 
-  constructor (distinguishedName: x509DN, key: KeyObject, options: CsrOptions = {}) {
+  constructor (distinguishedName: DistinguishedName, key: KeyObject, options: CsrOptions = {}) {
     if (key.asymmetricKeyType !== 'rsa' && key.asymmetricKeyType !== 'ec') {
       throw new Error('cannot create csr: invalid key type. only rsa and ec are supported')
     }
@@ -67,6 +57,9 @@ export default class CertificateSigningRequest {
     this.options = options
     this.key = key
   }
+
+  selfSign () {} // todo
+  sign () {} // todo
 
   toAsn (): Buffer {
     if (this.#encoded) {
@@ -78,29 +71,11 @@ export default class CertificateSigningRequest {
       throw new Error('cannot encode csr: provided key is not the private key')
     }
 
-    const subject: AsnSetNode[] = []
-    for (const dnProp in this.distinguishedName) {
-      if (dnProp in this.distinguishedName) {
-        subject.push({
-          type: 'set',
-          value: {
-            type: 'sequence',
-            value: [
-              { type: 'oid', value: objectIds.ids.distinguishedName[dnProp].oid, length: 0 },
-              { type: objectIds.ids.distinguishedName[dnProp].type, value: this.distinguishedName[dnProp as keyof x509DN] as string, length: 0 },
-            ],
-            length: 0
-          },
-          length: 0
-        })
-      }
-    }
-
     const certInfo: AsnSequenceNode = {
       type: 'sequence',
       value: [
-        { type: 'integer', value: 0, length: 0 },
-        { type: 'sequence', value: subject, length: 0 },
+        { type: 'integer', value: 0n, length: 0 },
+        serializeDistinguishedName(this.distinguishedName),
         decodeAsn(createPublicKey(this.key).export({ format: 'der', type: 'spki' })).value[0]
       ],
       length: 0
@@ -142,19 +117,8 @@ export default class CertificateSigningRequest {
     }
 
     // -- Decode certificate information
-    if (certInfoVersion.value !== 0) throw new Error(`invalid csr: expected version to be 0, got ${certInfoVersion.value}`)
-    const dn: x509DN = {}
-    for (const entry of certInfoSubject.value) {
-      if (entry.type !== 'set') throw new TypeError(`type mismatch: expected set got ${entry.type}`)
-      const seq = entry.value
-      if (seq.type !== 'sequence') throw new TypeError(`type mismatch: expected sequence got ${seq.type}`)
-
-      const oid = typedAsnGetOrThrow(seq, 0, 'oid').value
-      if (oid in objectIds.distinguishedName) { // todo: throw un unrecognized values? or ignore is fine?
-        const type = objectIds.distinguishedName[oid]
-        dn[type.name as keyof x509DN] = typedAsnGetOrThrow(seq, 1, type.type).value
-      }
-    }
+    if (certInfoVersion.value !== 0n) throw new Error(`invalid csr: expected version to be 0, got ${certInfoVersion.value}`)
+    const dn = parseDistinguishedName(certInfoSubject)
 
     const csr = new CertificateSigningRequest(dn, key)
     csr.#encoded = asn
