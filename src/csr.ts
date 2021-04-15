@@ -27,7 +27,7 @@
 
 import type { KeyObject } from 'crypto'
 import type { AsnSequenceNode, AsnSetNode } from './asn.js'
-import type { SupportedPublicKeyAlgorithm, SupportedSignatureAlgorithm } from './oid.js'
+import type { SupportedSignatureAlgorithm } from './oid.js'
 
 import { createPublicKey, sign, verify } from 'crypto'
 import { decodePem, encodePem } from './pem.js'
@@ -45,7 +45,6 @@ type x509DN = {
 }
 
 type Algorithm = {
-  key: SupportedPublicKeyAlgorithm
   signature: SupportedSignatureAlgorithm
 }
 
@@ -68,8 +67,6 @@ export default class CertificateSigningRequest {
       // This is defined when the CSR has been decoded using fromAsn (or fromPem), which yields a readonly csr
       return this.#encoded
     }
-
-    const pk = createPublicKey(this.key).export({ format: 'der', type: 'pkcs1' })
 
     const subject: AsnSetNode[] = []
     for (const dnProp in this.distinguishedName) {
@@ -94,21 +91,7 @@ export default class CertificateSigningRequest {
       value: [
         { type: 'integer', value: 0, length: 0 },
         { type: 'sequence', value: subject, length: 0 },
-        {
-          type: 'sequence',
-          value: [
-            {
-              type: 'sequence',
-              value: [
-                { type: 'oid', value: objectIds.ids.publicKeyAlgorithm[this.algorithm.key], length: 0 },
-                { type: 'null', value: null, length: 0 }
-              ],
-              length: 0
-            },
-            { type: 'bit_string', value: Buffer.concat([ Buffer.from([ 0x00 ]), pk ]), length: 0 },
-          ],
-          length: 0
-        }
+        decodeAsn(createPublicKey(this.key).export({ format: 'der', type: 'spki' })).value[0]
       ],
       length: 0
     }
@@ -153,14 +136,7 @@ export default class CertificateSigningRequest {
     const certInfoKey = typedGetOrThrow(certInfo, 2, 'sequence')
 
     // -- Read public key information
-    const keyAlgOid = typedGetOrThrow(typedGetOrThrow(certInfoKey, 0, 'sequence'), 0, 'oid').value
-    if (!(keyAlgOid in objectIds.publicKeyAlgorithm)) {
-      throw new Error(`unsupported public key algorithm (oid ${keyAlgOid})`)
-    }
-
-    const keyAlg = objectIds.publicKeyAlgorithm[keyAlgOid]
-    const keyBits = typedGetOrThrow(certInfoKey, 1, 'bit_string').value.slice(1)
-    const key = createPublicKey({ key: keyBits, format: 'der', type: 'pkcs1' })
+    const key = createPublicKey({ key: encodeAsn(certInfoKey), format: 'der', type: 'spki' })
 
     // -- Read key information
     const signatureAlgOid = typedGetOrThrow(typedGetOrThrow(decoded, 1, 'sequence'), 0, 'oid').value
@@ -189,7 +165,7 @@ export default class CertificateSigningRequest {
       }
     }
 
-    const csr = new CertificateSigningRequest(dn, key, { key: keyAlg, signature: signatureAlg })
+    const csr = new CertificateSigningRequest(dn, key, { signature: signatureAlg })
     csr.#encoded = asn
     return csr
   }

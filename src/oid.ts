@@ -57,11 +57,9 @@ export type SupportedSignatureAlgorithm =
 type ObjectIdMap = {
   ids: {
     distinguishedName: Record<string, { oid: string, type: AsnStringNode['type'] }>
-    publicKeyAlgorithm: Record<SupportedPublicKeyAlgorithm, string>
     signatureAlgorithm: Record<SupportedSignatureAlgorithm, string>
   }
-  distinguishedName: Record<ObjectIdMap['ids']['distinguishedName'][string]['oid'], { name: keyof ObjectIdMap['ids']['distinguishedName'], type: AsnStringNode['type'] }>,
-  publicKeyAlgorithm: Record<ObjectIdMap['ids']['publicKeyAlgorithm'][SupportedPublicKeyAlgorithm], SupportedPublicKeyAlgorithm>
+  distinguishedName: Record<ObjectIdMap['ids']['distinguishedName'][string]['oid'], { name: keyof ObjectIdMap['ids']['distinguishedName'], type: AsnStringNode['type'] }>
   signatureAlgorithm: Record<ObjectIdMap['ids']['signatureAlgorithm'][SupportedSignatureAlgorithm], SupportedSignatureAlgorithm>
 }
 
@@ -75,17 +73,6 @@ const objectIds: ObjectIdMap = {
       organization: { oid: '2.5.4.10', type: 'utf8_string' },
       organizationalUnit: { oid: '2.5.4.11', type: 'utf8_string' },
       emailAddress: { oid: '1.2.840.113549.1.9.1', type: 'ia5_string' },
-    },
-    publicKeyAlgorithm: {
-      rsa: '1.2.840.113549.1.1.1',
-      'rsa-pss': '1.2.840.113549.1.1.10',
-      dsa: '1.2.840.10040.4.1',
-      ec: '1.2.840.10045.2.1',
-      x25519: '1.3.101.110',
-      x448: '1.3.101.111',
-      ed25519: '1.3.101.112',
-      ed448: '1.3.101.113',
-      dh: '1.2.840.113549.1.3.1',
     },
     signatureAlgorithm: {
       md4: '2.16.840.1.113719.1.2.8.95',
@@ -113,17 +100,6 @@ const objectIds: ObjectIdMap = {
     '2.5.4.10': { name: 'organization', type: 'utf8_string' },
     '2.5.4.11': { name: 'organizationalUnit', type: 'utf8_string' },
     '1.2.840.113549.1.9.1': { name: 'emailAddress', type: 'ia5_string' },
-  },
-  publicKeyAlgorithm: {
-    '1.2.840.113549.1.1.1': 'rsa',
-    '1.2.840.113549.1.1.10': 'rsa-pss',
-    '1.2.840.10040.4.1': 'dsa',
-    '1.2.840.10045.2.1': 'ec',
-    '1.3.101.110': 'x25519',
-    '1.3.101.111': 'x448',
-    '1.3.101.112': 'ed25519',
-    '1.3.101.113': 'ed448',
-    '1.2.840.113549.1.3.1': 'dh',
   },
   signatureAlgorithm: {
     '2.16.840.1.113719.1.2.8.95': 'md4',
