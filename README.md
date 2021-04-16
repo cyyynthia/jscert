@@ -14,7 +14,6 @@ use the lib with data you trust!!
 ## Install
 The library is alpha-quality, potentially broken and doesn't do a lot of things.
 
-**Note**: This library uses ES Modules.
 ```
 pnpm i @cyyynthia/jscert
 yarn add @cyyynthia/jscert
