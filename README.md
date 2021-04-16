@@ -12,9 +12,7 @@ I may, in the future, try this lib against a fuzzer and make sure it's as safe a
 use the lib with data you trust!!
 
 ## Install
-Soon:tm:
-<!--
-The library is alpha-quality, potentially broken and doesn't do a lot of things yet.
+The library is alpha-quality, potentially broken and doesn't do a lot of things.
 
 **Note**: This library uses ES Modules.
 ```
@@ -22,7 +20,6 @@ pnpm i @cyyynthia/jscert
 yarn add @cyyynthia/jscert
 npm i @cyyynthia/jscert
 ```
--->
 
 ## Usage
 ### Create a Certificate Signing Request
@@ -67,12 +64,13 @@ console.log(csr)
 import { readFileSync } from 'fs'
 import { CertificateSigningRequest } from '@cyyynthia/jscert'
 
+const expiry = new Date(Date.now() + 365 * 86400e3) // A year (roughly) from now
 const csr = new CertificateSigningRequest(...)
 // If the CSR wasn't created with new CertificateSigningRequest,
 // the operation will fail as the private key would be unknown.
 // You can pass the private key as a parameter in this case.
 // The key you pass must match the public key!!
-const cert = csr.selfSign() // or csr.selfSign(privateKey)
+const cert = csr.createSelfSignedCertificate(expiry) // or csr.selfSign(expiry, privateKey)
 
 console.log(cert.toPem()) // .toAsn() is also available
 ```
@@ -85,9 +83,10 @@ import { CertificateSigningRequest, Certificate } from '@cyyynthia/jscert'
 const issuerCert = Certificate.fromPem(...)
 const issuerPrivateKey = ... // PrivateKeyObject
 
+const expiry = new Date(Date.now() + 365 * 86400e3) // A year (roughly) from now
 const pem = readFileSync('./certificate-signing-request.pem', 'utf8')
 const csr = CertificateSigningRequest.fromPem(pem)
-const cert = csr.sign(issuerCert, issuerPrivateKey) // The certificate and the private key must match!!
+const cert = csr.createCertificate(issuerCert, issuerPrivateKey, expiry) // The certificate and the private key must match!!
 
 console.log(cert.toPem()) // .toAsn() is also available
 ```

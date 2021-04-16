@@ -30,11 +30,12 @@ import type { AsnSequenceNode } from './asn.js'
 import type { DigestAlgorithm } from './sign.js'
 
 import { createPublicKey } from 'crypto'
-import { typedAsnGetOrThrow } from './util.js'
+import { sameKeyPair, typedAsnGetOrThrow } from './util.js'
 import { decodePem, encodePem } from './pem.js'
 import { decodeAsn, encodeAsn } from './asn.js'
 import { sign, verify } from './sign.js'
 import { DistinguishedName, parseDistinguishedName, serializeDistinguishedName } from './x509.js'
+import Certificate, { createFromProps } from './cert.js'
 
 type CsrOptions = {
   digest?: DigestAlgorithm
@@ -58,8 +59,18 @@ export default class CertificateSigningRequest {
     this.key = key
   }
 
-  selfSign () {} // todo
-  sign () {} // todo
+  createSelfSignedCertificate (expiry: Date, privateKey?: KeyObject): Certificate {
+    const key = privateKey ?? this.key
+    if (key.type !== 'private') throw new Error('cannot sign csr: no private key provided')
+    if (!sameKeyPair(this.key, key)) throw new Error('cannot sign csr: public and private key mismatch')
+    return createFromProps(this.key, key, this.options.digest ?? 'sha256', this.distinguishedName, this.distinguishedName, expiry, true)
+  }
+
+  createCertificate (expiry: Date, issuer: Certificate, issuerKey: KeyObject): Certificate {
+    if (issuerKey.type !== 'private') throw new Error('cannot sign csr: no private key provided')
+    if (!sameKeyPair(issuer.key, issuerKey)) throw new Error('cannot sign csr: public and private key mismatch')
+    return createFromProps(this.key, issuerKey, this.options.digest ?? 'sha256', issuer.subject, this.distinguishedName, expiry, true)
+  }
 
   toAsn (): Buffer {
     if (this.#encoded) {
@@ -85,7 +96,7 @@ export default class CertificateSigningRequest {
       type: 'sequence',
       value: [
         certInfo,
-        ...sign(certInfo, this.key, this.options.digest ?? 'sha256')
+        ...sign(encodeAsn(certInfo), this.key, this.options.digest ?? 'sha256')
       ],
       length: 0
     })

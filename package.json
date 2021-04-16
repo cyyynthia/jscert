@@ -1,13 +1,14 @@
 {
   "name": "@cyyynthia/jscert",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "A fast, lightweight & dependency-free NodeJS library to read, write and manipulate X.509 certificates",
-  "type": "module",
-  "main": "index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "repository": "https://github.com/cyyynthia/jscert",
   "author": "Cynthia <cynthia@cynthia.dev>",
   "license": "BSD-3-Clause",
   "scripts": {
+    "prepublishOnly": "tsc",
     "build": "tsc"
   },
   "devDependencies": {

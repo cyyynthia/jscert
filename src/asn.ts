@@ -307,10 +307,10 @@ function encodeDate (date: Date, utc: boolean): Buffer {
     date.getUTCHours(),
     date.getUTCMinutes(),
     date.getUTCSeconds(),
-    utc || !ms ? void 0 : (ms / 1000).toFixed(3)
+    utc || !ms ? void 0 : (ms / 1000).toFixed(3).slice(1)
   ]
 
-  return Buffer.from(parts.filter(Boolean).map((n) => n!.toString().padStart(2, '0')).join('') + 'Z')
+  return Buffer.from(parts.filter((p) => typeof p !== 'undefined').map((n) => n!.toString().padStart(2, '0')).join('') + 'Z')
 }
 
 function decodeSequence (buf: Buffer): AsnNode[] {

@@ -27,12 +27,12 @@
 
 import type { KeyObject } from 'crypto'
 
-import { createPublicKey } from 'crypto'
+import { randomBytes, createPublicKey } from 'crypto'
 import { typedAsnGetOrThrow } from './util.js'
 import { decodePem, encodePem } from './pem.js'
-import { decodeAsn, encodeAsn } from './asn.js'
-import { verify, verifyRaw } from './sign.js'
-import { DistinguishedName, parseDistinguishedName } from './x509.js'
+import { AsnSequenceNode, decodeAsn, encodeAsn } from './asn.js'
+import { determineAlgorithm, DigestAlgorithm, sign, verify, verifyRaw } from './sign.js'
+import { DistinguishedName, parseDistinguishedName, serializeDistinguishedName } from './x509.js'
 
 const LABEL = 'CERTIFICATE'
 
@@ -95,9 +95,9 @@ export default class Certificate {
     if (certInfo.value[0].type === 'custom') certInfo.value.shift()
     const serialNumber = typedAsnGetOrThrow(certInfo, 0, 'integer').value
     const signatureAlg = typedAsnGetOrThrow(typedAsnGetOrThrow(certInfo, 1, 'sequence'), 0, 'oid').value
-    const certInfoSubject = typedAsnGetOrThrow(certInfo, 2, 'sequence')
+    const certInfoIssuer = typedAsnGetOrThrow(certInfo, 2, 'sequence')
     const certInfoExpiry = typedAsnGetOrThrow(certInfo, 3, 'sequence')
-    const certInfoIssuer = typedAsnGetOrThrow(certInfo, 4, 'sequence')
+    const certInfoSubject = typedAsnGetOrThrow(certInfo, 4, 'sequence')
     const certInfoKey = typedAsnGetOrThrow(certInfo, 5, 'sequence')
 
     // -- Read public key information
@@ -139,4 +139,56 @@ export default class Certificate {
 
     return Certificate.fromAsn(asn)
   }
+}
+
+export function createFromProps (key: KeyObject, signKey: KeyObject, digest: DigestAlgorithm, issuer: DistinguishedName, subject: DistinguishedName, expiry: Date, self: boolean): Certificate {
+  const serialBuf = randomBytes(16)
+  if (serialBuf[0] & 128) serialBuf[0] = serialBuf[0] ^ 128
+  const res = serialBuf.reduce((a, b) => (BigInt(a) << 8n) + BigInt(b), 0n)
+  const serial = (serialBuf[0] & 128) ? -res : res
+  const signAlg = determineAlgorithm(signKey, digest)
+  const now = new Date()
+  now.setMilliseconds(0)
+  const certInfo: AsnSequenceNode = {
+    type: 'sequence',
+    value: [
+      { type: 'integer', value: serial, length: 0 },
+      {
+        type: 'sequence',
+        value: [
+          { type: 'oid', value: signAlg, length: 0 },
+          { type: 'null', value: null, length: 0 }
+        ],
+        length: 0
+      },
+      serializeDistinguishedName(issuer),
+      {
+        type: 'sequence',
+        value: [
+          { type: 'generalized_time', value: now, length: 0 },
+          { type: 'generalized_time', value: expiry, length: 0 }
+        ],
+        length: 0
+      },
+      serializeDistinguishedName(subject),
+      decodeAsn(createPublicKey(key).export({ format: 'der', type: 'spki' })).value[0]
+    ],
+    length: 0
+  }
+
+  const asnCertInfo = encodeAsn(certInfo)
+  const signature = sign(asnCertInfo, signKey, digest)
+  return new Certificate(
+    serial,
+    signAlg,
+    subject,
+    issuer,
+    now,
+    expiry,
+    key,
+    signature[1].value.slice(1),
+    self,
+    encodeAsn({ type: 'sequence', value: [ certInfo, ...signature ], length: 0 }),
+    asnCertInfo
+  )
 }

@@ -73,23 +73,27 @@ const objectIdByAlgorithm: { rsa: Record<DigestAlgorithm, string>, ec: Record<Di
   }
 }
 
-export function sign (data: AsnSequenceNode, key: KeyObject, digest: DigestAlgorithm = 'sha256'): [ AsnSequenceNode, AsnBitStringNode ] {
+export function determineAlgorithm (key: KeyObject, digest: DigestAlgorithm) {
   if (!key.asymmetricKeyType || (key.asymmetricKeyType !== 'rsa' && key.asymmetricKeyType !== 'ec')) {
-    throw new Error('cannot sign data: invalid key')
+    throw new Error('cannot pick algorithm: invalid key')
   }
 
+  return objectIdByAlgorithm[key.asymmetricKeyType][digest]
+}
+
+export function sign (data: Buffer, key: KeyObject, digest: DigestAlgorithm = 'sha256'): [ AsnSequenceNode, AsnBitStringNode ] {
   return [
     {
       type: 'sequence',
       value: [
-        { type: 'oid', value: objectIdByAlgorithm[key.asymmetricKeyType][digest], length: 0 },
+        { type: 'oid', value: determineAlgorithm(key, digest), length: 0 },
         { type: 'null', value: null, length: 0 }
       ],
       length: 0
     },
     {
       type: 'bit_string',
-      value: Buffer.concat([ Buffer.from([ 0x00 ]), cryptoSign(digest, encodeAsn(data), key) ]),
+      value: Buffer.concat([ Buffer.from([ 0x00 ]), cryptoSign(digest, data, key) ]),
       length: 0
     }
   ]

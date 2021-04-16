@@ -32,6 +32,7 @@ export * from './inspect.js'
 
 // Modules to manipulate actual objects
 export { default as CertificateSigningRequest } from './csr.js'
+export { default as Certificate } from './cert.js'
 
 // The rest
 export { DistinguishedName } from './x509.js'

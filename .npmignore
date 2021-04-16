@@ -1,5 +1,6 @@
 .github
 .gitignore
+tsconfig.tsbuildinfo
 
 src
 *.nogit.*

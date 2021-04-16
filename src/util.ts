@@ -25,7 +25,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+import type { KeyObject } from 'crypto'
 import type { AsnNode, AsnSequenceNode } from './asn.js'
+import { sign, verify } from 'crypto'
 
 export function typedAsnGetOrThrow<T extends AsnNode['type']> (sequence: AsnSequenceNode, item: number, type: T): AsnNode & { type: T } {
   if (sequence.type !== 'sequence') {
@@ -42,4 +44,14 @@ export function typedAsnGetOrThrow<T extends AsnNode['type']> (sequence: AsnSequ
   }
 
   return node as AsnNode & { type: Extract<T, 'string'> }
+}
+
+export function sameKeyPair (pub: KeyObject, priv: KeyObject): boolean {
+  try {
+    const test = Buffer.alloc(0)
+    const signature = sign('sha256', test, priv)
+    return verify('sha256', test, pub, signature)
+  } catch {
+    return false
+  }
 }
